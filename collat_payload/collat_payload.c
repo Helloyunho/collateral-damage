@@ -399,13 +399,14 @@ UINT64 do_sidechannel(/*SHELLCODE_CTX* ctx, const char* dump_path*/) {
     return kernel_base;
 }
 
-BOOL write_msg(SOCKET sock, HANDLE f, CHAR* msg) {
-    BOOL result = send(sock, msg, strlen(msg), 0);
+void write_msg(SOCKET sock, HANDLE f, CHAR* msg) {
+    if (sock != INVALID_SOCKET) {
+        send(sock, msg, strlen(msg), 0);
+    }
 
     if (f != NULL) {
         WriteFile(f, msg, strlen(msg), NULL, NULL);
     }
-    return result;
 }
 
 int main(int argc, char** argv) {

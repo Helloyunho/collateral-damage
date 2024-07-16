@@ -1,1 +1,5 @@
-{}
+{
+    "files.associations": {
+        "post_exploit.h": "c"
+    }
+}

@@ -404,7 +404,7 @@ void write_msg(SOCKET sock, HANDLE f, CHAR* msg) {
         send(sock, msg, strlen(msg), 0);
     }
 
-    if (f != NULL) {
+    if (f != INVALID_HANDLE_VALUE) {
         WriteFile(f, msg, strlen(msg), NULL, NULL);
     }
 }

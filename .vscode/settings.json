@@ -1,5 +1,6 @@
 {
     "files.associations": {
-        "post_exploit.h": "c"
+        "post_exploit.h": "c",
+        "stdio.h": "c"
     }
 }
